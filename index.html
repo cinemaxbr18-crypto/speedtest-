@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SpeedTest Ultimate</title>
+    <!-- Chart.js para o gráfico em tempo real -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8; /* Azul claro */
+            --accent-glow: rgba(56, 189, 248, 0.3);
+            --upload-color: #a78bfa; /* Roxo */
+            --danger: #ef4444;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 800px;
+            padding: 20px;
+        }
+
+        /* Cabeçalho e IP */
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        h1 { margin: 0; font-size: 2rem; letter-spacing: -1px; }
+        .isp-info {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .badge {
+            background: rgba(255,255,255,0.1);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+        }
+
+        /* Medidor Principal (Gauge) */
+        .gauge-wrapper {
+            position: relative;
+            width: 280px;
+            height: 280px;
+            margin: 0 auto 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .gauge-bg {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: conic-gradient(from 180deg, #334155 0%, #334155 100%);
+            mask: radial-gradient(transparent 65%, black 66%);
+            -webkit-mask: radial-gradient(transparent 65%, black 66%);
+            transform: rotate(-90deg);
+        }
+
+        .gauge-fill {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: conic-gradient(from 180deg, var(--accent) 0%, transparent 0%);
+            mask: radial-gradient(transparent 65%, black 66%);
+            -webkit-mask: radial-gradient(transparent 65%, black 66%);
+            transform: rotate(-90deg);
+            transition: background 0.1s;
+            box-shadow: 0 0 30px var(--accent-glow);
+        }
+
+        .value-display {
+            z-index: 10;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .big-number {
+            font-size: 4.5rem;
+            font-weight: 700;
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .unit {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        /* Grid de Status */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: var(--card);
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.05);
+            transition: transform 0.2s;
+        }
+
+        .stat-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 5px; }
+        .stat-val { font-size: 1.2rem; font-weight: 600; }
+        
+        .c-down { color: var(--accent); }
+        .c-up { color: var(--upload-color); }
+
+        /* Gráfico */
+        .chart-container {
+            height: 150px;
+            width: 100%;
+            margin-bottom: 30px;
+            position: relative;
+        }
+
+        /* Botão */
+        .action-area { text-align: center; }
+        
+        .start-btn {
+            background: var(--text-main);
+            color: var(--bg);
+            border: none;
+            padding: 18px 60px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7);
+        }
+
+        .start-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+
+        .start-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            background: #475569;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #334155;
+            margin-top: 20px;
+            border-radius: 2px;
+            overflow: hidden;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: var(--accent);
+            width: 0%;
+            transition: width 0.3s linear;
+        }
+
+        /* Responsividade */
+        @media (max-width: 600px) {
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .big-number { font-size: 3.5rem; }
+            .gauge-wrapper { width: 220px; height: 220px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <header>
+        <h1>SPEED<span style="color:var(--accent)">TEST</span></h1>
+        <div class="isp-info" id="ispInfo">
+            <span class="badge">IP</span> <span id="ipAddress">Detectando...</span>
+        </div>
+    </header>
+
+    <div class="gauge-wrapper">
+        <div class="gauge-bg"></div>
+        <div class="gauge-fill" id="gaugeFill"></div>
+        <div class="value-display">
+            <span class="big-number" id="liveSpeed">0.0</span>
+            <span class="unit" id="liveUnit">Mbps</span>
+        </div>
+    </div>
+
+    <div class="chart-container">
+        <canvas id="speedChart"></canvas>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">Ping</div>
+            <div class="stat-val" id="resPing">--</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Jitter</div>
+            <div class="stat-val" id="resJitter">--</div>
+        </div>
+        <div class="stat-card" style="border-color: var(--accent-glow)">
+            <div class="stat-label">Download</div>
+            <div class="stat-val c-down" id="resDown">--</div>
+        </div>
+        <div class="stat-card" style="border-color: rgba(167, 139, 250, 0.3)">
+            <div class="stat-label">Upload</div>
+            <div class="stat-val c-up" id="resUp">--</div>
+        </div>
+    </div>
+
+    <div class="action-area">
+        <button class="start-btn" id="startBtn" onclick="runFullTest()">INICIAR</button>
+        <div class="progress-bar" id="progBar"><div class="progress-fill" id="progFill"></div></div>
+        <p id="statusText" style="color:var(--text-muted); font-size:0.9rem; margin-top:15px; height:20px;"></p>
+    </div>
+</div>
+
+<script>
+    // --- CONFIGURAÇÃO ---
+    // Usamos endpoints CORS-friendly e rápidos
+    const CONFIG = {
+        // Imagem grande em CDN rápido para download
+        dlUrl: 'https://images.unsplash.com/photo-1520034475321-cbe63696469a?q=80&w=3000&auto=format&fit=crop',
+        // Endpoint seguro para receber POSTs (Postman Echo é confiável)
+        ulUrl: 'https://postman-echo.com/post', 
+        // Endpoint leve para ping
+        pingUrl: 'https://www.google.com/favicon.ico'
+    };
+
+    // --- ELEMENTOS DOM ---
+    const els = {
+        btn: document.getElementById('startBtn'),
+        liveSpeed: document.getElementById('liveSpeed'),
+        liveUnit: document.getElementById('liveUnit'),
+        gaugeFill: document.getElementById('gaugeFill'),
+        status: document.getElementById('statusText'),
+        progBar: document.getElementById('progBar'),
+        progFill: document.getElementById('progFill'),
+        res: {
+            ping: document.getElementById('resPing'),
+            jitter: document.getElementById('resJitter'),
+            down: document.getElementById('resDown'),
+            up: document.getElementById('resUp'),
+        },
+        ip: document.getElementById('ipAddress')
+    };
+
+    // --- CHART.JS SETUP ---
+    const ctx = document.getElementById('speedChart').getContext('2d');
+    
+    // Gradiente para o gráfico
+    const gradientDown = ctx.createLinearGradient(0, 0, 0, 150);
+    gradientDown.addColorStop(0, 'rgba(56, 189, 248, 0.5)');
+    gradientDown.addColorStop(1, 'rgba(56, 189, 248, 0)');
+
+    const gradientUp = ctx.createLinearGradient(0, 0, 0, 150);
+    gradientUp.addColorStop(0, 'rgba(167, 139, 250, 0.5)');
+    gradientUp.addColorStop(1, 'rgba(167, 139, 250, 0)');
+
+    const chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: Array(30).fill(''),
+            datasets: [{
+                label: 'Speed',
+                data: Array(30).fill(null),
+                borderColor: '#38bdf8',
+                backgroundColor: gradientDown,
+                borderWidth: 2,
+                tension: 0.4,
+                fill: true,
+                pointRadius: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { display: false },
+                y: { 
+                    display: true, 
+                    grid: { color: '#334155' },
+                    ticks: { color: '#94a3b8' },
+                    beginAtZero: true
+                }
+            },
+            animation: { duration: 0 }
+        }
+    });
+
+    // --- LÓGICA DO TESTE ---
+
+    // 1. Detectar IP
+    fetch('https://api.ipify.org?format=json')
+        .then(res => res.json())
+        .then(data => els.ip.textContent = data.ip)
+        .catch(() => els.ip.textContent = "IP Privado/Desconhecido");
+
+    let isRunning = false;
+
+    async function runFullTest() {
+        if (isRunning) return;
+        isRunning = true;
+        resetUI();
+        
+        try {
+            // 1. Ping & Jitter
+            updateStatus("Medindo latência...", 10);
+            const pingData = await measurePing();
+            els.res.ping.textContent = Math.round(pingData.avg) + " ms";
+            els.res.jitter.textContent = Math.round(pingData.jitter) + " ms";
+
+            // 2. Download
+            updateStatus("Testando download...", 30);
+            setTheme('download');
+            const dlSpeed = await measureSpeed('download');
+            els.res.down.textContent = dlSpeed + " Mbps";
+
+            // 3. Upload
+            updateStatus("Testando upload...", 70);
+            setTheme('upload');
+            // Pequena pausa para limpar buffers
+            await new Promise(r => setTimeout(r, 500)); 
+            const ulSpeed = await measureSpeed('upload');
+            els.res.up.textContent = ulSpeed + " Mbps";
+
+            updateStatus("Teste concluído", 100);
+            setTheme('idle');
+            
+        } catch (error) {
+            console.error(error);
+            updateStatus("Erro na conexão. Tente novamente.", 0);
+        }
+
+        els.btn.disabled = false;
+        isRunning = false;
+    }
+
+    // Ping Simples (Múltiplas requisições HEAD)
+    async function measurePing() {
+        const pings = [];
+        for (let i = 0; i < 5; i++) {
+            const start = performance.now();
+            try {
+                await fetch(CONFIG.pingUrl + `?t=${Date.now()}`, { method: 'HEAD', cache: 'no-cache', mode: 'no-cors' });
+                // Nota: com mode: 'no-cors', não vemos o status, mas o tempo conta
+                const end = performance.now();
+                pings.push(end - start);
+            } catch (e) {}
+            await new Promise(r => setTimeout(r, 100));
+        }
+        
+        const min = Math.min(...pings);
+        const max = Math.max(...pings);
+        const avg = pings.reduce((a, b) => a + b, 0) / pings.length;
+        const jitter = Math.abs(avg - min); // Simplificado
+
+        return { avg, jitter };
+    }
+
+    // Função Unificada de Velocidade (Down/Up)
+    async function measureSpeed(type) {
+        const duration = 8000; // 8 segundos de teste
+        const startTime = performance.now();
+        const endTime = startTime + duration;
+        
+        let totalBytes = 0;
+        let lastUiUpdate = 0;
+        let speedReadings = [];
+
+        // Limpa o gráfico
+        chart.data.datasets[0].data = Array(30).fill(null);
+        chart.update();
+
+        // Loop de transferência
+        while (performance.now() < endTime) {
+            const chunkStart = performance.now();
+            let size = 0;
+
+            try {
+                if (type === 'download') {
+                    // Baixa blob
+                    const res = await fetch(CONFIG.dlUrl + `&t=${Math.random()}`, {cache: 'no-store'});
+                    const blob = await res.blob();
+                    size = blob.size;
+                } else {
+                    // Sobe blob (Chunk de 2MB)
+                    size = 2 * 1024 * 1024; 
+                    const payload = new Uint8Array(size).fill(Math.random() * 255);
+                    await fetch(CONFIG.ulUrl, {
+                        method: 'POST',
+                        body: payload,
+                        mode: 'cors'
+                    });
+                }
+            } catch (e) {
+                // Se upload falhar (CORS estrito), simula zero ou ignora
+                break;
+            }
+
+            const chunkEnd = performance.now();
+            const chunkDuration = (chunkEnd - chunkStart) / 1000; // segundos
+            totalBytes += size;
+
+            // Velocidade Instantânea
+            const instantBps = (size * 8) / chunkDuration;
+            const instantMbps = (instantBps / 1_000_000);
+            
+            // Atualiza UI a cada ~100ms
+            if (chunkEnd - lastUiUpdate > 100) {
+                updateGauge(instantMbps);
+                updateChart(instantMbps);
+                lastUiUpdate = chunkEnd;
+            }
+        }
+
+        // Média final (baseada no total transferido / tempo total)
+        const totalDuration = (performance.now() - startTime) / 1000;
+        const avgMbps = ((totalBytes * 8) / totalDuration / 1_000_000).toFixed(2);
+        
+        updateGauge(0);
+        return avgMbps;
+    }
+
+    // --- HELPERS VISUAIS ---
+
+    function updateGauge(value) {
+        els.liveSpeed.textContent = value.toFixed(1);
+        
+        // Escala Logarítmica Visual (para o gráfico não estourar em 1Gbps)
+        // 0-10Mbps preenche rápido, 500+ preenche devagar
+        let percent = 0;
+        if(value < 100) percent = value; 
+        else percent = 100 + (value - 100) / 10; 
+        
+        // Limita a 180 graus (metade do círculo, lógica do css conic)
+        // No CSS: 180deg = 0%, 360deg = 100% visível na máscara
+        // Ajuste fino para o visual conic
+        const maxDeg = 360; 
+        const deg = Math.min((percent / 200) * 180, 180); // Ajuste arbitrário para visual
+        
+        // Simplesmente preenchemos visualmente via porcentagem no conic
+        // 0% é 0 graus, 100% é 180 graus visíveis
+        const finalP = Math.min(value / 2, 100); // 200mbps = 100% visual
+        els.gaugeFill.style.background = `conic-gradient(from 180deg, var(--accent) ${finalP}%, transparent 0%)`;
+    }
+
+    function updateChart(val) {
+        const data = chart.data.datasets[0].data;
+        data.shift();
+        data.push(val);
+        chart.update('none'); // 'none' para performance
+    }
+
+    function setTheme(mode) {
+        if (mode === 'upload') {
+            document.documentElement.style.setProperty('--accent', '#a78bfa');
+            document.documentElement.style.setProperty('--accent-glow', 'rgba(167, 139, 250, 0.3)');
+            chart.data.datasets[0].borderColor = '#a78bfa';
+            chart.data.datasets[0].backgroundColor = gradientUp;
+        } else if (mode === 'download') {
+            document.documentElement.style.setProperty('--accent', '#38bdf8');
+            document.documentElement.style.setProperty('--accent-glow', 'rgba(56, 189, 248, 0.3)');
+            chart.data.datasets[0].borderColor = '#38bdf8';
+            chart.data.datasets[0].backgroundColor = gradientDown;
+        } else {
+            // Idle
+            updateGauge(0);
+        }
+    }
+
+    function updateStatus(msg, percent) {
+        els.status.textContent = msg;
+        els.progBar.style.opacity = 1;
+        els.progFill.style.width = percent + '%';
+        if (percent >= 100) setTimeout(() => els.progBar.style.opacity = 0, 1000);
+    }
+
+    function resetUI() {
+        els.btn.disabled = true;
+        els.res.ping.textContent = '--';
+        els.res.jitter.textContent = '--';
+        els.res.down.textContent = '--';
+        els.res.up.textContent = '--';
+        chart.data.datasets[0].data = Array(30).fill(null);
+        chart.update();
+    }
+</script>
+
+</body>
+</html>
+
